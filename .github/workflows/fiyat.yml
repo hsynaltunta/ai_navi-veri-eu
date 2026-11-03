@@ -1,0 +1,39 @@
+name: Akaryakıt fiyatları (Avrupa)
+
+# 6 saatte bir: Fransa, İspanya, İtalya'nın resmi açık verisinden istasyon başına fiyatlar.
+on:
+  schedule:
+    - cron: '20 */6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: veri
+  cancel-in-progress: false
+
+jobs:
+  fiyat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Önceki manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p out
+          gh release download veri -p manifest.json -D out 2>/dev/null || echo "ilk çalışma"
+      - name: Hazırla
+        run: python scripts/avrupa.py fiyat
+      - name: Sürüme yükle
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view veri >/dev/null 2>&1 || gh release create veri --title "Avrupa verileri" \
+            --notes "ai_navi Avrupa verileri. Uygulama kendisi indirir."
+          gh release upload veri out/* --clobber

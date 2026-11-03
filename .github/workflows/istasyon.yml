@@ -1,0 +1,45 @@
+name: İstasyonlar ve mola yerleri (Avrupa)
+
+# Haftada bir: ülke ülke OpenStreetMap şarj / akaryakıt istasyonları ve mola yerleri, "veri" sürümüne yüklenir.
+# Telefon yalnız bulunduğu ülkenin dosyalarını indirir.
+on:
+  schedule:
+    - cron: '0 1 * * 1'     # her pazartesi 04:00 (İstanbul)
+  workflow_dispatch:
+    inputs:
+      ulkeler:
+        description: 'Yalnız bu ülkeler (ör. "DE AT"; boş: hepsi)'
+        required: false
+        default: ''
+
+permissions:
+  contents: write
+
+concurrency:
+  group: veri
+  cancel-in-progress: false
+
+jobs:
+  istasyon:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Önceki manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p out
+          gh release download veri -p manifest.json -D out 2>/dev/null || echo "ilk çalışma"
+      - name: Hazırla
+        run: python scripts/avrupa.py istasyon ${{ github.event.inputs.ulkeler }}
+      - name: Sürüme yükle
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view veri >/dev/null 2>&1 || gh release create veri --title "Avrupa verileri" \
+            --notes "ai_navi Avrupa verileri: OpenStreetMap (ODbL) istasyon ve mola yerleri, devletlerin açık verisinden akaryakıt fiyatları. Uygulama kendisi indirir."
+          gh release upload veri out/* --clobber
